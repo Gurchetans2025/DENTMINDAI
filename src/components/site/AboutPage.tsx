@@ -1,6 +1,6 @@
 import AboutHero from "./AboutHero";
 import DoctorSection from "./DoctorSection";
-import ClinicGallery from "./ClinicGallery";
+import Clinic from "./ClinicGallery";
 import ClinicStats from "./ClinicStats";
 import Technology from "./Technology";
 import BookNow from "./BookNow";
@@ -10,7 +10,7 @@ export function AboutPage() {
     <main className="bg-white">
       <AboutHero />
       <DoctorSection />
-      <ClinicGallery />
+      <Clinic />
       <ClinicStats />
       <Technology />
       <BookNow />

@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as TreatmentFinderRouteImport } from './routes/treatment-finder'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AppointmentRouteImport } from './routes/appointment'
@@ -17,6 +18,11 @@ import { Route as AboutRouteImport } from './routes/about'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ApiChatRouteImport } from './routes/api/chat'
 
+const TreatmentFinderRoute = TreatmentFinderRouteImport.update({
+  id: '/treatment-finder',
+  path: '/treatment-finder',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const DashboardRoute = DashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
@@ -60,6 +66,7 @@ export interface FileRoutesByFullPath {
   '/appointment': typeof AppointmentRoute
   '/auth': typeof AuthRoute
   '/dashboard': typeof DashboardRoute
+  '/treatment-finder': typeof TreatmentFinderRoute
   '/api/chat': typeof ApiChatRoute
 }
 export interface FileRoutesByTo {
@@ -69,6 +76,7 @@ export interface FileRoutesByTo {
   '/appointment': typeof AppointmentRoute
   '/auth': typeof AuthRoute
   '/dashboard': typeof DashboardRoute
+  '/treatment-finder': typeof TreatmentFinderRoute
   '/api/chat': typeof ApiChatRoute
 }
 export interface FileRoutesById {
@@ -79,6 +87,7 @@ export interface FileRoutesById {
   '/appointment': typeof AppointmentRoute
   '/auth': typeof AuthRoute
   '/dashboard': typeof DashboardRoute
+  '/treatment-finder': typeof TreatmentFinderRoute
   '/api/chat': typeof ApiChatRoute
 }
 export interface FileRouteTypes {
@@ -90,6 +99,7 @@ export interface FileRouteTypes {
     | '/appointment'
     | '/auth'
     | '/dashboard'
+    | '/treatment-finder'
     | '/api/chat'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -99,6 +109,7 @@ export interface FileRouteTypes {
     | '/appointment'
     | '/auth'
     | '/dashboard'
+    | '/treatment-finder'
     | '/api/chat'
   id:
     | '__root__'
@@ -108,6 +119,7 @@ export interface FileRouteTypes {
     | '/appointment'
     | '/auth'
     | '/dashboard'
+    | '/treatment-finder'
     | '/api/chat'
   fileRoutesById: FileRoutesById
 }
@@ -118,11 +130,19 @@ export interface RootRouteChildren {
   AppointmentRoute: typeof AppointmentRoute
   AuthRoute: typeof AuthRoute
   DashboardRoute: typeof DashboardRoute
+  TreatmentFinderRoute: typeof TreatmentFinderRoute
   ApiChatRoute: typeof ApiChatRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/treatment-finder': {
+      id: '/treatment-finder'
+      path: '/treatment-finder'
+      fullPath: '/treatment-finder'
+      preLoaderRoute: typeof TreatmentFinderRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/dashboard': {
       id: '/dashboard'
       path: '/dashboard'
@@ -182,6 +202,7 @@ const rootRouteChildren: RootRouteChildren = {
   AppointmentRoute: AppointmentRoute,
   AuthRoute: AuthRoute,
   DashboardRoute: DashboardRoute,
+  TreatmentFinderRoute: TreatmentFinderRoute,
   ApiChatRoute: ApiChatRoute,
 }
 export const routeTree = rootRouteImport

@@ -454,10 +454,72 @@ function Dentists() {
               >
                 More About Us
               </motion.button>
-           
-              </Link>
+            </Link>
+             
 
 
+              <DialogContent className="max-h-[92vh] w-[min(94vw,1220px)] max-w-none overflow-y-auto border-0 bg-white p-0 text-[#2f2948] shadow-elegant sm:rounded-none">
+                <div className="relative overflow-hidden bg-white px-5 py-12 sm:px-10 lg:px-14 lg:py-16">
+                  <div className="mx-auto max-w-3xl text-center">
+                    <DialogTitle className="text-4xl font-extrabold leading-tight tracking-normal sm:text-5xl">
+                      Dr. Lisha&apos;s Clinic
+                    </DialogTitle>
+                    <p className="mt-4 text-3xl font-light tracking-normal sm:text-4xl">
+                      Reliable. Professional. Friendly.
+                    </p>
+                  </div>
+
+                  <div className="relative mx-auto mt-16 max-w-6xl">
+                    <div
+                      className="absolute inset-x-[-5vw] bottom-0 top-24 hidden opacity-100 md:block"
+                      aria-hidden="true"
+                    >
+                      <div className="h-full bg-[#ddf6e6]" />
+                      <div className="absolute inset-0 bg-[radial-gradient(circle_at_12%_28%,rgba(78,181,136,0.24)_0_34px,transparent_36px),radial-gradient(circle_at_88%_70%,rgba(78,181,136,0.24)_0_38px,transparent_40px)]" />
+                    </div>
+
+                    <div className="relative grid gap-8 lg:grid-cols-[360px_1fr] lg:items-start">
+                      <div className="mx-auto w-full max-w-[360px]">
+                        <img
+                          src={doctorLishaImg}
+                          alt="Dr. Lisha"
+                          loading="lazy"
+                          className="aspect-[1.16/1] w-full bg-white object-cover shadow-soft"
+                        />
+                        <div className="mt-8 text-left">
+                          <h3 className="text-3xl font-extrabold tracking-normal">Dr. Lisha</h3>
+                          <p className="mt-4 text-2xl font-light leading-tight">BDS</p>
+                          <p className="mt-1 text-2xl font-light leading-tight">Clinic Director</p>
+                        </div>
+                      </div>
+
+                      <div className="bg-[#f6dfd2] px-7 py-12 sm:px-12 lg:min-h-[520px] lg:px-16 lg:py-24">
+                        <h3 className="text-2xl font-extrabold tracking-normal">
+                          Dental services the way it should be.
+                        </h3>
+                        <div className="mt-8 space-y-5 text-base leading-8 text-[#3f3759]">
+                          <p>
+                            Discover your healthiest, brightest smile at{" "}
+                            <strong>Healthy Grins</strong>! Nestled in the heart of East Delhi,
+                            located in Krishna Nagar, we&apos;re a dental clinic dedicated to
+                            providing comprehensive care for all your dental needs.
+                          </p>
+                          <p>
+                            We aim at making dental procedures minimally painful and uplifting your
+                            treatment experience. Trust <strong>Healthy Grins</strong> to keep your
+                            smile radiant and maintain optimal oral health.
+                          </p>
+                          <p>
+                            Along with taking care of your healthy smile, we also focus on
+                            maintaining sterilization, preventing cross contamination and following
+                            the protocols required to achieve the same.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </DialogContent>
             
           </div>
         </motion.div>
@@ -1088,13 +1150,10 @@ function Gallery() {
             Real transformations. <em>Real confidence.</em>
           </h2>
         </motion.div>
-        <motion.a
-          {...fadeUp}
-          href={referenceSmileImg}
-          target="_blank"
-          rel="noreferrer"
-          className="group mx-auto mt-16 block max-w-3xl overflow-hidden rounded-3xl bg-card shadow-card transition-all hover:shadow-elegant"
-        >
+          <Link
+            to="/treatment-finder"
+            className="group mx-auto mt-16 block max-w-3xl overflow-hidden rounded-3xl bg-card shadow-card transition-all hover:shadow-elegant"
+          ></Link>
           <div className="aspect-[16/9] overflow-hidden">
             <img
               src={smile1}
@@ -1104,12 +1163,15 @@ function Gallery() {
             />
           </div>
           <div className="p-6">
-            <div className="font-display text-2xl">Open live smile gallery</div>
+            <div className="font-display text-2xl">
+             Treatment Finder
+            </div>
+
             <p className="mt-2 text-sm text-black">
-              Use your connected gallery source for real patient transformations.
+              Upload your symptoms, dental photo, or X-ray and receive an AI-powered treatment recommendation with possible causes and suggested next steps.
             </p>
           </div>
-        </motion.a>
+        
         <div className="mt-16 grid md:grid-cols-2 lg:grid-cols-3 gap-5">
           {([] as number[]).map((_, i) => (
             <motion.div
