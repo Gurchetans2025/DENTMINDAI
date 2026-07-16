@@ -1,8 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Link } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
 import { motion } from "motion/react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
   Calendar,
   MessageSquare,
@@ -41,13 +40,6 @@ import { Nav } from "@/components/site/Navbar";
 import { AIChat } from "@/components/site/AIChat";
 import { BrandLogo } from "@/components/site/BrandLogo";
 import { Dialog, DialogContent, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import {
-  type BlogPost,
-  fallbackBlogPosts,
-  fetchPublishedBlogPosts,
-  formatBlogDate,
-} from "@/lib/blog-posts";
-import { canManageClinic, hasTemporaryAdminSession } from "@/lib/admin-access";
 import { referenceSmileBackgroundImg, referenceSmileImg } from "@/lib/assets";
 
 const heroImg =
@@ -92,8 +84,6 @@ function HomePage() {
 
 function ReferenceHero() {
   const [menuOpen, setMenuOpen] = useState(false);
-  const [isSignedIn, setIsSignedIn] = useState(false);
-  const [isDoctorAdmin, setIsDoctorAdmin] = useState(false);
   const menuLinks = [
     { label: "Home", href: "#" },
     { label: "Services", href: "#services" },
@@ -102,42 +92,6 @@ function ReferenceHero() {
     { label: "FAQ", href: "#faq" },
     { label: "Contact", href: "#contact" },
   ];
-
-  useEffect(() => {
-    let mounted = true;
-
-    async function updateAccess() {
-      const temporaryAdmin = hasTemporaryAdminSession();
-      const { data: userData } = await supabase.auth.getUser();
-      if (!mounted) return;
-
-      const user = userData.user;
-      setIsSignedIn(!!user || temporaryAdmin);
-      if (!user) {
-        setIsDoctorAdmin(temporaryAdmin);
-        return;
-      }
-
-      const { data: roles } = await supabase
-        .from("user_roles")
-        .select("role")
-        .eq("user_id", user.id);
-      if (!mounted) return;
-      setIsDoctorAdmin(temporaryAdmin || canManageClinic(user.email, roles));
-    }
-
-    void updateAccess();
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(() => {
-      void updateAccess();
-    });
-
-    return () => {
-      mounted = false;
-      subscription.unsubscribe();
-    };
-  }, []);
 
   return (
     <section className="relative min-h-screen overflow-hidden bg-[#c1bcd5] text-primary">
@@ -150,12 +104,9 @@ function ReferenceHero() {
       </div>
 
       <div className="absolute right-6 top-6 z-20 flex items-center gap-8 text-primary sm:right-[9.4vw] sm:top-10">
-        <Link
-          to={isSignedIn ? "/dashboard" : "/auth"}
-          className="flex items-center gap-2 text-base font-medium"
-        >
+        <Link to="/auth" className="flex items-center gap-2 text-base font-medium">
           <UserCircle className="h-7 w-7" />
-          {isSignedIn ? "Dashboard" : "Log In"}
+          Log In
         </Link>
         <button
           type="button"
@@ -178,11 +129,9 @@ function ReferenceHero() {
             <Link to="/dashboard" onClick={() => setMenuOpen(false)}>
               Patient Dashboard
             </Link>
-            {isDoctorAdmin && (
-              <Link to="/admin" onClick={() => setMenuOpen(false)}>
-                Doctor/Admin
-              </Link>
-            )}
+            <Link to="/admin" onClick={() => setMenuOpen(false)}>
+              Doctor/Admin
+            </Link>
           </nav>
         </div>
       )}
@@ -496,6 +445,7 @@ function Dentists() {
               Faridabad (Haryana) and is having an Experience of over 6years in providing high
               quality Dental Care and Aesthetics treatments.
             </motion.p>
+            
             <Link to="/about">
              <motion.button
               type="button"
@@ -509,68 +459,7 @@ function Dentists() {
              
 
 
-              <DialogContent className="max-h-[92vh] w-[min(94vw,1220px)] max-w-none overflow-y-auto border-0 bg-white p-0 text-[#2f2948] shadow-elegant sm:rounded-none">
-                <div className="relative overflow-hidden bg-white px-5 py-12 sm:px-10 lg:px-14 lg:py-16">
-                  <div className="mx-auto max-w-3xl text-center">
-                    <DialogTitle className="text-4xl font-extrabold leading-tight tracking-normal sm:text-5xl">
-                      Dr. Lisha&apos;s Clinic
-                    </DialogTitle>
-                    <p className="mt-4 text-3xl font-light tracking-normal sm:text-4xl">
-                      Reliable. Professional. Friendly.
-                    </p>
-                  </div>
-
-                  <div className="relative mx-auto mt-16 max-w-6xl">
-                    <div
-                      className="absolute inset-x-[-5vw] bottom-0 top-24 hidden opacity-100 md:block"
-                      aria-hidden="true"
-                    >
-                      <div className="h-full bg-[#ddf6e6]" />
-                      <div className="absolute inset-0 bg-[radial-gradient(circle_at_12%_28%,rgba(78,181,136,0.24)_0_34px,transparent_36px),radial-gradient(circle_at_88%_70%,rgba(78,181,136,0.24)_0_38px,transparent_40px)]" />
-                    </div>
-
-                    <div className="relative grid gap-8 lg:grid-cols-[360px_1fr] lg:items-start">
-                      <div className="mx-auto w-full max-w-[360px]">
-                        <img
-                          src={doctorLishaImg}
-                          alt="Dr. Lisha"
-                          loading="lazy"
-                          className="aspect-[1.16/1] w-full bg-white object-cover shadow-soft"
-                        />
-                        <div className="mt-8 text-left">
-                          <h3 className="text-3xl font-extrabold tracking-normal">Dr. Lisha</h3>
-                          <p className="mt-4 text-2xl font-light leading-tight">BDS</p>
-                          <p className="mt-1 text-2xl font-light leading-tight">Clinic Director</p>
-                        </div>
-                      </div>
-
-                      <div className="bg-[#f6dfd2] px-7 py-12 sm:px-12 lg:min-h-[520px] lg:px-16 lg:py-24">
-                        <h3 className="text-2xl font-extrabold tracking-normal">
-                          Dental services the way it should be.
-                        </h3>
-                        <div className="mt-8 space-y-5 text-base leading-8 text-[#3f3759]">
-                          <p>
-                            Discover your healthiest, brightest smile at{" "}
-                            <strong>Healthy Grins</strong>! Nestled in the heart of East Delhi,
-                            located in Krishna Nagar, we&apos;re a dental clinic dedicated to
-                            providing comprehensive care for all your dental needs.
-                          </p>
-                          <p>
-                            We aim at making dental procedures minimally painful and uplifting your
-                            treatment experience. Trust <strong>Healthy Grins</strong> to keep your
-                            smile radiant and maintain optimal oral health.
-                          </p>
-                          <p>
-                            Along with taking care of your healthy smile, we also focus on
-                            maintaining sterilization, preventing cross contamination and following
-                            the protocols required to achieve the same.
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </DialogContent>
+              
             
           </div>
         </motion.div>
@@ -1534,17 +1423,25 @@ function DashboardPreview() {
 
 /* ============ BLOG ============ */
 function Blog() {
-  const [showAll, setShowAll] = useState(false);
-  const { data, isLoading } = useQuery({
-    queryKey: ["published-blog-posts"],
-    queryFn: () => fetchPublishedBlogPosts(),
-    staleTime: 1000 * 60 * 5,
-  });
-  const posts = data?.length ? data : fallbackBlogPosts;
-  const visiblePosts = showAll ? posts : posts.slice(0, 3);
-
+  const posts = [
+    {
+      tag: "Hygiene",
+      title: "The 2-minute rule that saves your teeth",
+      desc: "The science behind brushing time, technique, and timing.",
+    },
+    {
+      tag: "Whitening",
+      title: "In-clinic vs. at-home whitening",
+      desc: "What actually works — and what damages enamel.",
+    },
+    {
+      tag: "Kids",
+      title: "Your child's first dental visit",
+      desc: "A stress-free checklist for parents.",
+    },
+  ];
   return (
-    <section id="blog" className="py-24 lg:py-32 text-black">
+    <section className="py-24 lg:py-32 text-black">
       <div className="mx-auto max-w-7xl px-6">
         <motion.div {...fadeUp} className="flex items-end justify-between flex-wrap gap-4">
           <div>
@@ -1553,83 +1450,36 @@ function Blog() {
               Dental wisdom, <em>simplified.</em>
             </h2>
           </div>
-          <button
-            type="button"
-            onClick={() => setShowAll((value) => !value)}
-            className="text-sm text-black hover:underline"
-          >
-            {showAll ? "Show latest" : "View all articles"} <span aria-hidden="true">→</span>
-          </button>
+          <a href="#" className="text-sm text-black hover:underline">
+            View all articles →
+          </a>
         </motion.div>
-        {isLoading && (
-          <div className="mt-8 text-sm text-black/70">Loading latest dental articles...</div>
-        )}
         <div className="mt-16 grid md:grid-cols-3 gap-6">
-          {visiblePosts.map((post, i) => (
-            <motion.div
-              key={post.id}
+          {posts.map((p, i) => (
+            <motion.article
+              key={p.title}
               {...fadeUp}
               transition={{ duration: 0.6, delay: i * 0.08 }}
               className="group rounded-3xl bg-card overflow-hidden shadow-card hover:shadow-elegant transition-all"
             >
-              {post.imageUrl ? (
-                <img
-                  src={post.imageUrl}
-                  alt=""
-                  className="aspect-[16/10] w-full object-cover"
-                  loading="lazy"
-                />
-              ) : (
-                <div className="aspect-[16/10] bg-primary-gradient" />
-              )}
+              <div className="aspect-[16/10] bg-primary-gradient" />
               <div className="p-6">
                 <div className="text-xs uppercase tracking-widest text-black font-semibold">
-                  {post.category}
+                  {p.tag}
                 </div>
                 <h3 className="mt-2 font-display text-2xl text-black transition-colors">
-                  {post.title}
+                  {p.title}
                 </h3>
-                <p className="mt-3 text-sm text-black leading-relaxed">{post.excerpt}</p>
-                <BlogPostDialog post={post} />
+                <p className="mt-3 text-sm text-black leading-relaxed">{p.desc}</p>
+                <div className="mt-4 text-sm text-black inline-flex items-center gap-1">
+                  Read more <ArrowRight className="h-3.5 w-3.5" />
+                </div>
               </div>
-            </motion.div>
+            </motion.article>
           ))}
         </div>
       </div>
     </section>
-  );
-}
-
-function BlogPostDialog({ post }: { post: BlogPost }) {
-  return (
-    <Dialog>
-      <DialogTrigger className="mt-4 text-sm text-black inline-flex items-center gap-1 hover:underline">
-        Read more <ArrowRight className="h-3.5 w-3.5" />
-      </DialogTrigger>
-      <DialogContent className="max-h-[86vh] max-w-3xl overflow-y-auto rounded-3xl">
-        {post.imageUrl ? (
-          <img
-            src={post.imageUrl}
-            alt=""
-            className="aspect-[16/7] w-full rounded-2xl object-cover"
-          />
-        ) : (
-          <div className="aspect-[16/7] rounded-2xl bg-primary-gradient" />
-        )}
-        <div className="text-xs uppercase tracking-widest text-muted-foreground">
-          {post.category} · {formatBlogDate(post.publishedAt)}
-        </div>
-        <DialogTitle className="font-display text-3xl font-normal leading-tight text-black">
-          {post.title}
-        </DialogTitle>
-        <p className="text-base leading-7 text-black">{post.excerpt}</p>
-        <div className="space-y-4 text-sm leading-7 text-black">
-          {post.content.split(/\n{2,}/).map((paragraph) => (
-            <p key={paragraph}>{paragraph}</p>
-          ))}
-        </div>
-      </DialogContent>
-    </Dialog>
   );
 }
 
@@ -1710,29 +1560,19 @@ function Contact() {
           </h2>
           <div className="mt-10 space-y-5 text-sm">
             <Row icon={MapPin} title="Address">
-              <span>
-                F-15/10 Shop No.6, Lala Hans Raj Mahajan Road,
-                <br />
-                Krishna Nagar, Delhi-110051
-              </span>
+              128 Willow Avenue, Suite 400 · Downtown, CA 90210
             </Row>
             <Row icon={Phone} title="Phone">
-              <a href="tel:+919821127942" className="hover:underline">
-                +91 9821127942
-              </a>
+              +91 9821127942
             </Row>
             <Row icon={Mail} title="Email">
-              <a href="mailto:healthygrinsbylisha@gmail.com" className="hover:underline">
-                healthygrinsbylisha@gmail.com
-              </a>
+              care@healthygrinz.com
             </Row>
             <Row icon={Clock} title="Working Hours">
               Mon–Sat 9am–8pm · Sun 10am–4pm
             </Row>
             <Row icon={HeartPulse} title="24/7 Emergency">
-              <a href="tel:+919821127942" className="hover:underline">
-                +91 9821127942
-              </a>
+              +91 9821127942
             </Row>
           </div>
         </motion.div>
@@ -1742,8 +1582,8 @@ function Contact() {
           className="rounded-3xl overflow-hidden shadow-elegant aspect-[4/3] lg:aspect-auto"
         >
           <iframe
-            title="Healthy Grins Dental Clinic location"
-            src="https://www.openstreetmap.org/export/embed.html?bbox=77.2725%2C28.6500%2C77.2935%2C28.6720&layer=mapnik&marker=28.6610%2C77.2830"
+            title="HealthyGrinz location"
+            src="https://www.openstreetmap.org/export/embed.html?bbox=-118.42%2C34.06%2C-118.36%2C34.09&layer=mapnik"
             className="w-full h-full min-h-[400px] border-0"
             loading="lazy"
           />
@@ -1849,7 +1689,7 @@ function Footer() {
             ].map(({ icon: Icon, label }) => (
               <a
                 key={label}
-                href={label === "Email" ? "mailto:healthygrinsbylisha@gmail.com" : "#"}
+                href={label === "Email" ? "mailto:care@healthygrinz.com" : "#"}
                 aria-label={label}
                 className="grid h-7 w-7 place-items-center rounded-full bg-black text-white transition hover:bg-primary"
               >
