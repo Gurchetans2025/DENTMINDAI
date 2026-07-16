@@ -1,0 +1,127 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  Outlet,
+  Link,
+  createRootRouteWithContext,
+  useRouter,
+  HeadContent,
+  Scripts,
+} from "@tanstack/react-router";
+import { useEffect, type ReactNode } from "react";
+import { Toaster } from "sonner";
+
+import appCss from "../styles.css?url";
+import { reportLovableError } from "../lib/lovable-error-reporting";
+import { referenceSmileBackgroundImg } from "@/lib/assets";
+
+function NotFoundComponent() {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-hero-gradient px-4">
+      <div className="max-w-md text-center">
+        <h1 className="text-8xl font-bold text-primary-gradient">404</h1>
+        <h2 className="mt-4 text-2xl font-semibold text-foreground">Page not found</h2>
+        <p className="mt-2 text-sm text-muted-foreground">
+          The page you're looking for doesn't exist.
+        </p>
+        <Link
+          to="/"
+          className="mt-6 inline-flex items-center justify-center rounded-full bg-primary-gradient px-6 py-3 text-sm font-medium text-primary-foreground shadow-elegant hover:opacity-90 transition"
+        >
+          Back to HealthyGrinz
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+
+function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
+  console.error(error);
+  const router = useRouter();
+  useEffect(() => {
+    reportLovableError(error, { boundary: "tanstack_root_error_component" });
+  }, [error]);
+
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-background px-4">
+      <div className="max-w-md text-center">
+        <h1 className="text-xl font-semibold">Something went wrong</h1>
+        <p className="mt-2 text-sm text-muted-foreground">Please try again.</p>
+        <button
+          onClick={() => {
+            router.invalidate();
+            reset();
+          }}
+          className="mt-6 rounded-full bg-primary px-6 py-2 text-primary-foreground"
+        >
+          Try again
+        </button>
+      </div>
+    </div>
+  );
+}
+
+export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
+  head: () => ({
+    meta: [
+      { charSet: "utf-8" },
+      { name: "viewport", content: "width=device-width, initial-scale=1" },
+      { title: "HealthyGrinz — AI-Powered Dental Care for Every Smile" },
+      {
+        name: "description",
+        content:
+          "Premium AI-assisted dental clinic. Painless treatments, expert dentists, and a smarter patient experience for families, kids, and adults.",
+      },
+      { name: "author", content: "HealthyGrinz" },
+      { property: "og:title", content: "HealthyGrinz — AI-Powered Dental Care" },
+      {
+        property: "og:description",
+        content:
+          "Healthy smiles begin at HealthyGrinz. Book appointments, chat with our AI dental assistant, and access modern dentistry.",
+      },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
+    ],
+    links: [
+      { rel: "stylesheet", href: appCss },
+      { rel: "icon", href: "/healthy-grins-logo.svg", type: "image/svg+xml" },
+      { rel: "preconnect", href: "https://static.wixstatic.com" },
+      { rel: "preload", as: "image", href: referenceSmileBackgroundImg },
+      { rel: "preconnect", href: "https://fonts.googleapis.com" },
+      { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
+      {
+        rel: "stylesheet",
+        href: "https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@300;400;500;600;700&display=swap",
+      },
+    ],
+  }),
+  shellComponent: RootShell,
+  component: RootComponent,
+  notFoundComponent: NotFoundComponent,
+  errorComponent: ErrorComponent,
+});
+
+function RootShell({ children }: { children: ReactNode }) {
+  return (
+    <html lang="en">
+      <head>
+        <HeadContent />
+      </head>
+      <body>
+        {children}
+        <Scripts />
+      </body>
+    </html>
+  );
+}
+
+function RootComponent() {
+  const { queryClient } = Route.useRouteContext();
+
+  return (
+    <QueryClientProvider client={queryClient}>
+      <Outlet />
+      <Toaster position="top-center" richColors />
+    </QueryClientProvider>
+  );
+}
