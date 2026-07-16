@@ -1,7 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Link } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
 import { motion } from "motion/react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Calendar,
   MessageSquare,
@@ -40,6 +41,13 @@ import { Nav } from "@/components/site/Navbar";
 import { AIChat } from "@/components/site/AIChat";
 import { BrandLogo } from "@/components/site/BrandLogo";
 import { Dialog, DialogContent, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import {
+  type BlogPost,
+  fallbackBlogPosts,
+  fetchPublishedBlogPosts,
+  formatBlogDate,
+} from "@/lib/blog-posts";
+import { canManageClinic, hasTemporaryAdminSession } from "@/lib/admin-access";
 import { referenceSmileBackgroundImg, referenceSmileImg } from "@/lib/assets";
 
 const heroImg =
@@ -84,6 +92,8 @@ function HomePage() {
 
 function ReferenceHero() {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [isSignedIn, setIsSignedIn] = useState(false);
+  const [isDoctorAdmin, setIsDoctorAdmin] = useState(false);
   const menuLinks = [
     { label: "Home", href: "#" },
     { label: "Services", href: "#services" },
@@ -92,6 +102,42 @@ function ReferenceHero() {
     { label: "FAQ", href: "#faq" },
     { label: "Contact", href: "#contact" },
   ];
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function updateAccess() {
+      const temporaryAdmin = hasTemporaryAdminSession();
+      const { data: userData } = await supabase.auth.getUser();
+      if (!mounted) return;
+
+      const user = userData.user;
+      setIsSignedIn(!!user || temporaryAdmin);
+      if (!user) {
+        setIsDoctorAdmin(temporaryAdmin);
+        return;
+      }
+
+      const { data: roles } = await supabase
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", user.id);
+      if (!mounted) return;
+      setIsDoctorAdmin(temporaryAdmin || canManageClinic(user.email, roles));
+    }
+
+    void updateAccess();
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(() => {
+      void updateAccess();
+    });
+
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
+  }, []);
 
   return (
     <section className="relative min-h-screen overflow-hidden bg-[#c1bcd5] text-primary">
@@ -104,9 +150,12 @@ function ReferenceHero() {
       </div>
 
       <div className="absolute right-6 top-6 z-20 flex items-center gap-8 text-primary sm:right-[9.4vw] sm:top-10">
-        <Link to="/auth" className="flex items-center gap-2 text-base font-medium">
+        <Link
+          to={isSignedIn ? "/dashboard" : "/auth"}
+          className="flex items-center gap-2 text-base font-medium"
+        >
           <UserCircle className="h-7 w-7" />
-          Log In
+          {isSignedIn ? "Dashboard" : "Log In"}
         </Link>
         <button
           type="button"
@@ -129,9 +178,11 @@ function ReferenceHero() {
             <Link to="/dashboard" onClick={() => setMenuOpen(false)}>
               Patient Dashboard
             </Link>
-            <Link to="/admin" onClick={() => setMenuOpen(false)}>
-              Doctor/Admin
-            </Link>
+            {isDoctorAdmin && (
+              <Link to="/admin" onClick={() => setMenuOpen(false)}>
+                Doctor/Admin
+              </Link>
+            )}
           </nav>
         </div>
       )}
@@ -1483,25 +1534,17 @@ function DashboardPreview() {
 
 /* ============ BLOG ============ */
 function Blog() {
-  const posts = [
-    {
-      tag: "Hygiene",
-      title: "The 2-minute rule that saves your teeth",
-      desc: "The science behind brushing time, technique, and timing.",
-    },
-    {
-      tag: "Whitening",
-      title: "In-clinic vs. at-home whitening",
-      desc: "What actually works — and what damages enamel.",
-    },
-    {
-      tag: "Kids",
-      title: "Your child's first dental visit",
-      desc: "A stress-free checklist for parents.",
-    },
-  ];
+  const [showAll, setShowAll] = useState(false);
+  const { data, isLoading } = useQuery({
+    queryKey: ["published-blog-posts"],
+    queryFn: () => fetchPublishedBlogPosts(),
+    staleTime: 1000 * 60 * 5,
+  });
+  const posts = data?.length ? data : fallbackBlogPosts;
+  const visiblePosts = showAll ? posts : posts.slice(0, 3);
+
   return (
-    <section className="py-24 lg:py-32 text-black">
+    <section id="blog" className="py-24 lg:py-32 text-black">
       <div className="mx-auto max-w-7xl px-6">
         <motion.div {...fadeUp} className="flex items-end justify-between flex-wrap gap-4">
           <div>
@@ -1510,36 +1553,83 @@ function Blog() {
               Dental wisdom, <em>simplified.</em>
             </h2>
           </div>
-          <a href="#" className="text-sm text-black hover:underline">
-            View all articles →
-          </a>
+          <button
+            type="button"
+            onClick={() => setShowAll((value) => !value)}
+            className="text-sm text-black hover:underline"
+          >
+            {showAll ? "Show latest" : "View all articles"} <span aria-hidden="true">→</span>
+          </button>
         </motion.div>
+        {isLoading && (
+          <div className="mt-8 text-sm text-black/70">Loading latest dental articles...</div>
+        )}
         <div className="mt-16 grid md:grid-cols-3 gap-6">
-          {posts.map((p, i) => (
-            <motion.article
-              key={p.title}
+          {visiblePosts.map((post, i) => (
+            <motion.div
+              key={post.id}
               {...fadeUp}
               transition={{ duration: 0.6, delay: i * 0.08 }}
               className="group rounded-3xl bg-card overflow-hidden shadow-card hover:shadow-elegant transition-all"
             >
-              <div className="aspect-[16/10] bg-primary-gradient" />
+              {post.imageUrl ? (
+                <img
+                  src={post.imageUrl}
+                  alt=""
+                  className="aspect-[16/10] w-full object-cover"
+                  loading="lazy"
+                />
+              ) : (
+                <div className="aspect-[16/10] bg-primary-gradient" />
+              )}
               <div className="p-6">
                 <div className="text-xs uppercase tracking-widest text-black font-semibold">
-                  {p.tag}
+                  {post.category}
                 </div>
                 <h3 className="mt-2 font-display text-2xl text-black transition-colors">
-                  {p.title}
+                  {post.title}
                 </h3>
-                <p className="mt-3 text-sm text-black leading-relaxed">{p.desc}</p>
-                <div className="mt-4 text-sm text-black inline-flex items-center gap-1">
-                  Read more <ArrowRight className="h-3.5 w-3.5" />
-                </div>
+                <p className="mt-3 text-sm text-black leading-relaxed">{post.excerpt}</p>
+                <BlogPostDialog post={post} />
               </div>
-            </motion.article>
+            </motion.div>
           ))}
         </div>
       </div>
     </section>
+  );
+}
+
+function BlogPostDialog({ post }: { post: BlogPost }) {
+  return (
+    <Dialog>
+      <DialogTrigger className="mt-4 text-sm text-black inline-flex items-center gap-1 hover:underline">
+        Read more <ArrowRight className="h-3.5 w-3.5" />
+      </DialogTrigger>
+      <DialogContent className="max-h-[86vh] max-w-3xl overflow-y-auto rounded-3xl">
+        {post.imageUrl ? (
+          <img
+            src={post.imageUrl}
+            alt=""
+            className="aspect-[16/7] w-full rounded-2xl object-cover"
+          />
+        ) : (
+          <div className="aspect-[16/7] rounded-2xl bg-primary-gradient" />
+        )}
+        <div className="text-xs uppercase tracking-widest text-muted-foreground">
+          {post.category} · {formatBlogDate(post.publishedAt)}
+        </div>
+        <DialogTitle className="font-display text-3xl font-normal leading-tight text-black">
+          {post.title}
+        </DialogTitle>
+        <p className="text-base leading-7 text-black">{post.excerpt}</p>
+        <div className="space-y-4 text-sm leading-7 text-black">
+          {post.content.split(/\n{2,}/).map((paragraph) => (
+            <p key={paragraph}>{paragraph}</p>
+          ))}
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -1620,19 +1710,29 @@ function Contact() {
           </h2>
           <div className="mt-10 space-y-5 text-sm">
             <Row icon={MapPin} title="Address">
-              128 Willow Avenue, Suite 400 · Downtown, CA 90210
+              <span>
+                F-15/10 Shop No.6, Lala Hans Raj Mahajan Road,
+                <br />
+                Krishna Nagar, Delhi-110051
+              </span>
             </Row>
             <Row icon={Phone} title="Phone">
-              +91 9821127942
+              <a href="tel:+919821127942" className="hover:underline">
+                +91 9821127942
+              </a>
             </Row>
             <Row icon={Mail} title="Email">
-              care@healthygrinz.com
+              <a href="mailto:healthygrinsbylisha@gmail.com" className="hover:underline">
+                healthygrinsbylisha@gmail.com
+              </a>
             </Row>
             <Row icon={Clock} title="Working Hours">
               Mon–Sat 9am–8pm · Sun 10am–4pm
             </Row>
             <Row icon={HeartPulse} title="24/7 Emergency">
-              +91 9821127942
+              <a href="tel:+919821127942" className="hover:underline">
+                +91 9821127942
+              </a>
             </Row>
           </div>
         </motion.div>
@@ -1642,8 +1742,8 @@ function Contact() {
           className="rounded-3xl overflow-hidden shadow-elegant aspect-[4/3] lg:aspect-auto"
         >
           <iframe
-            title="HealthyGrinz location"
-            src="https://www.openstreetmap.org/export/embed.html?bbox=-118.42%2C34.06%2C-118.36%2C34.09&layer=mapnik"
+            title="Healthy Grins Dental Clinic location"
+            src="https://www.openstreetmap.org/export/embed.html?bbox=77.2725%2C28.6500%2C77.2935%2C28.6720&layer=mapnik&marker=28.6610%2C77.2830"
             className="w-full h-full min-h-[400px] border-0"
             loading="lazy"
           />
@@ -1749,7 +1849,7 @@ function Footer() {
             ].map(({ icon: Icon, label }) => (
               <a
                 key={label}
-                href={label === "Email" ? "mailto:care@healthygrinz.com" : "#"}
+                href={label === "Email" ? "mailto:healthygrinsbylisha@gmail.com" : "#"}
                 aria-label={label}
                 className="grid h-7 w-7 place-items-center rounded-full bg-black text-white transition hover:bg-primary"
               >

@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import {
   AlertTriangle,
@@ -13,8 +13,10 @@ import {
   ClipboardList,
   Download,
   Filter,
+  Eye,
   Menu,
   Moon,
+  Pencil,
   Plus,
   Search,
   Send,
@@ -22,11 +24,12 @@ import {
   ShieldCheck,
   Sparkles,
   Sun,
+  Trash2,
   Upload,
   UserRoundPlus,
   X,
 } from "lucide-react";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import {
   Area,
   AreaChart,
@@ -65,6 +68,20 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
+import { supabase } from "@/integrations/supabase/client";
+import {
+  type BlogPost,
+  fetchAdminBlogPosts,
+  formatBlogDate,
+  slugify,
+} from "@/lib/blog-posts";
+import {
+  CLINIC_GALLERY_BUCKET,
+  type ClinicGalleryImage,
+  fetchAdminClinicGallery,
+  galleryStoragePath,
+} from "@/lib/clinic-gallery";
+import { canManageClinic, hasTemporaryAdminSession } from "@/lib/admin-access";
 import { getModuleInsight } from "@/lib/clinic-ai";
 import { cn } from "@/lib/utils";
 
@@ -87,6 +104,17 @@ type Column<T> = {
   search?: (row: T) => string;
 };
 
+function getErrorMessage(error: unknown, fallback: string) {
+  if (error instanceof Error && error.message) return error.message;
+  if (typeof error === "object" && error !== null) {
+    const maybeMessage = "message" in error ? error.message : undefined;
+    const maybeDetails = "details" in error ? error.details : undefined;
+    if (typeof maybeMessage === "string" && maybeMessage.trim()) return maybeMessage;
+    if (typeof maybeDetails === "string" && maybeDetails.trim()) return maybeDetails;
+  }
+  return fallback;
+}
+
 const currency = new Intl.NumberFormat("en-US", {
   style: "currency",
   currency: "USD",
@@ -98,13 +126,81 @@ export function HealthyGrinzAdmin() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
   const [globalSearch, setGlobalSearch] = useState("");
+  const [access, setAccess] = useState<"checking" | "allowed" | "signed-out" | "blocked">(
+    "checking",
+  );
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", darkMode);
     return () => document.documentElement.classList.remove("dark");
   }, [darkMode]);
 
+  useEffect(() => {
+    let mounted = true;
+
+    async function checkAccess() {
+      if (hasTemporaryAdminSession()) {
+        setAccess("allowed");
+        return;
+      }
+
+      const { data: userData } = await supabase.auth.getUser();
+      if (!mounted) return;
+      if (!userData.user) {
+        setAccess("signed-out");
+        return;
+      }
+
+      const { data: roles } = await supabase
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", userData.user.id);
+      if (!mounted) return;
+      setAccess(canManageClinic(userData.user.email, roles) ? "allowed" : "blocked");
+    }
+
+    void checkAccess();
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(() => {
+      void checkAccess();
+    });
+
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
+  }, []);
+
   const currentLabel = navigation.find((item) => item.id === activeView)?.label ?? "Dashboard";
+
+  if (access === "checking") return <AdminAccessGate title="Checking admin access..." />;
+  if (access === "signed-out") {
+    return (
+      <AdminAccessGate
+        title="Sign in to manage blog posts"
+        description="The admin editor saves to Supabase, so the dentist must sign in first."
+        action={
+          <Button asChild>
+            <a href="/auth?redirect=/admin">Sign in</a>
+          </Button>
+        }
+      />
+    );
+  }
+  if (access === "blocked") {
+    return (
+      <AdminAccessGate
+        title="Admin access required"
+        description="Sign in with healthygrinsbylisha@gmail.com or an account that has the admin role."
+        action={
+          <Button asChild variant="outline">
+            <Link to="/dashboard">Go to dashboard</Link>
+          </Button>
+        }
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen bg-hero-gradient text-foreground">
@@ -191,6 +287,28 @@ export function HealthyGrinzAdmin() {
           />
         </main>
       </div>
+    </div>
+  );
+}
+
+function AdminAccessGate({
+  title,
+  description = "Please wait a moment.",
+  action,
+}: {
+  title: string;
+  description?: string;
+  action?: ReactNode;
+}) {
+  return (
+    <div className="grid min-h-screen place-items-center bg-hero-gradient px-4">
+      <Card className="w-full max-w-md border-border shadow-card">
+        <CardHeader>
+          <CardTitle>{title}</CardTitle>
+          <p className="text-sm leading-6 text-muted-foreground">{description}</p>
+        </CardHeader>
+        {action && <CardContent>{action}</CardContent>}
+      </Card>
     </div>
   );
 }
@@ -310,6 +428,8 @@ function AdminPage({
   if (activeView === "treatments") return <TreatmentsPage rows={data.treatments} />;
   if (activeView === "billing") return <BillingPage rows={data.invoices} />;
   if (activeView === "inventory") return <InventoryPage rows={data.inventory} />;
+  if (activeView === "blog") return <BlogPostsPage />;
+  if (activeView === "clinic-gallery") return <ClinicGalleryAdminPage />;
   if (activeView === "reports") return <ReportsPage data={data} />;
   if (activeView === "settings") return <SettingsPage />;
   if (activeView === "ai-center") return <AICenterPage setActiveView={setActiveView} />;
@@ -757,6 +877,573 @@ function InventoryPage({ rows }: { rows: InventoryItem[] }) {
         statusOptions={["Healthy", "Low Stock", "Critical"]}
         statusOf={(row) => row.status}
       />
+    </div>
+  );
+}
+
+type BlogFormState = {
+  title: string;
+  slug: string;
+  category: string;
+  excerpt: string;
+  content: string;
+  imageUrl: string;
+  isPublished: boolean;
+};
+
+const emptyBlogForm: BlogFormState = {
+  title: "",
+  slug: "",
+  category: "Dental Care",
+  excerpt: "",
+  content: "",
+  imageUrl: "",
+  isPublished: true,
+};
+
+function BlogPostsPage() {
+  const queryClient = useQueryClient();
+  const [form, setForm] = useState<BlogFormState>(emptyBlogForm);
+  const [editing, setEditing] = useState<BlogPost | null>(null);
+  const [saving, setSaving] = useState(false);
+  const { data: posts = [], isLoading } = useQuery({
+    queryKey: ["admin-blog-posts"],
+    queryFn: fetchAdminBlogPosts,
+    staleTime: 1000 * 60 * 2,
+  });
+
+  function updateField<K extends keyof BlogFormState>(key: K, value: BlogFormState[K]) {
+    setForm((current) => ({
+      ...current,
+      [key]: value,
+      slug: key === "title" && !editing ? slugify(String(value)) : current.slug,
+    }));
+  }
+
+  function resetForm() {
+    setForm(emptyBlogForm);
+    setEditing(null);
+  }
+
+  function editPost(post: BlogPost) {
+    setEditing(post);
+    setForm({
+      title: post.title,
+      slug: post.slug,
+      category: post.category,
+      excerpt: post.excerpt,
+      content: post.content,
+      imageUrl: post.imageUrl ?? "",
+      isPublished: post.isPublished,
+    });
+  }
+
+  async function savePost(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSaving(true);
+    try {
+      const { data: userData } = await supabase.auth.getUser();
+      if (!userData.user) {
+        toast.error(
+          hasTemporaryAdminSession()
+            ? "Temporary admin access is active. Confirm the email in Supabase before saving blog posts."
+            : "Please sign in as an admin before saving blog posts.",
+        );
+        return;
+      }
+
+      const { data: roles, error: roleError } = await supabase
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", userData.user.id);
+      if (roleError) throw roleError;
+      if (!canManageClinic(userData.user.email, roles)) {
+        toast.error("Sign in with the clinic admin email to save blog posts.");
+        return;
+      }
+
+      const publishNow = form.isPublished && !editing?.publishedAt;
+      const payload = {
+        title: form.title.trim(),
+        slug: slugify(form.slug || form.title),
+        category: form.category.trim() || "Dental Care",
+        excerpt: form.excerpt.trim(),
+        content: form.content.trim(),
+        image_url: form.imageUrl.trim() || null,
+        is_published: form.isPublished,
+        published_at: form.isPublished ? editing?.publishedAt ?? new Date().toISOString() : null,
+        author_id: userData.user.id,
+      };
+
+      if (!payload.title || !payload.excerpt || !payload.content) {
+        toast.error("Title, excerpt, and article body are required.");
+        return;
+      }
+
+      if (editing) {
+        const { error } = await supabase
+          .from("blog_posts")
+          .update({
+            ...payload,
+            published_at: publishNow ? new Date().toISOString() : payload.published_at,
+          })
+          .eq("id", editing.id);
+        if (error) throw error;
+        toast.success(form.isPublished ? "Blog post published" : "Draft saved for admin only");
+      } else {
+        const { error } = await supabase.from("blog_posts").insert(payload);
+        if (error) throw error;
+        toast.success(form.isPublished ? "Blog post published" : "Draft saved for admin only");
+      }
+
+      resetForm();
+      await queryClient.invalidateQueries({ queryKey: ["admin-blog-posts"] });
+      await queryClient.invalidateQueries({ queryKey: ["published-blog-posts"] });
+    } catch (error) {
+      toast.error(getErrorMessage(error, "Could not save blog post"));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function deletePost(post: BlogPost) {
+    if (!window.confirm(`Delete "${post.title}"?`)) return;
+    const { error } = await supabase.from("blog_posts").delete().eq("id", post.id);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success("Blog post deleted");
+    await queryClient.invalidateQueries({ queryKey: ["admin-blog-posts"] });
+    await queryClient.invalidateQueries({ queryKey: ["published-blog-posts"] });
+  }
+
+  return (
+    <div className="grid gap-5 xl:grid-cols-[0.9fr_1.2fr]">
+      <div className="space-y-5">
+        <PageHeader
+          eyebrow="Blog publishing"
+          title="Post dental articles for patients"
+          description="Create patient-friendly articles, save private drafts, or publish approved posts to the homepage."
+        />
+        <Card className="border-border shadow-card">
+          <CardHeader>
+            <CardTitle className="text-base">
+              {editing ? "Edit blog post" : "New blog post"}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={savePost} className="space-y-4">
+              <Field label="Title">
+                <Input
+                  required
+                  value={form.title}
+                  onChange={(event) => updateField("title", event.target.value)}
+                  placeholder="How to care for teeth after scaling"
+                />
+              </Field>
+              <div className="grid gap-4 md:grid-cols-2">
+                <Field label="Category">
+                  <Input
+                    value={form.category}
+                    onChange={(event) => updateField("category", event.target.value)}
+                    placeholder="Hygiene"
+                  />
+                </Field>
+                <Field label="Slug">
+                  <Input
+                    value={form.slug}
+                    onChange={(event) => updateField("slug", event.target.value)}
+                    placeholder="article-url-slug"
+                  />
+                </Field>
+              </div>
+              <Field label="Excerpt">
+                <Textarea
+                  required
+                  value={form.excerpt}
+                  onChange={(event) => updateField("excerpt", event.target.value)}
+                  placeholder="A short summary patients will see on the blog card."
+                  rows={3}
+                />
+              </Field>
+              <Field label="Article body">
+                <Textarea
+                  required
+                  value={form.content}
+                  onChange={(event) => updateField("content", event.target.value)}
+                  placeholder="Write the full article here. Use blank lines between paragraphs."
+                  rows={9}
+                />
+              </Field>
+              <Field label="Image URL">
+                <Input
+                  value={form.imageUrl}
+                  onChange={(event) => updateField("imageUrl", event.target.value)}
+                  placeholder="https://..."
+                />
+              </Field>
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border p-3">
+                <div>
+                  <div className="font-medium">Publish on website</div>
+                  <p className="text-xs text-muted-foreground">
+                    Drafts are saved for admin only and will not appear on the public website.
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant={form.isPublished ? "default" : "outline"}
+                  onClick={() => updateField("isPublished", !form.isPublished)}
+                >
+                  {form.isPublished ? "Published" : "Draft"}
+                </Button>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button disabled={saving} type="submit">
+                  <Plus />{" "}
+                  {saving
+                    ? "Saving..."
+                    : editing
+                      ? form.isPublished
+                        ? "Update post"
+                        : "Save draft"
+                      : form.isPublished
+                        ? "Publish post"
+                        : "Save draft"}
+                </Button>
+                {editing && (
+                  <Button type="button" variant="outline" onClick={resetForm}>
+                    Cancel edit
+                  </Button>
+                )}
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="space-y-5">
+        <PageHeader
+          eyebrow="Published content"
+          title="Manage homepage blog cards"
+          description="Published posts appear in the public Blog section. Drafts stay visible only here."
+          action={
+            <Button variant="outline" asChild>
+              <a href="/#blog">
+                <Eye /> View blog
+              </a>
+            </Button>
+          }
+        />
+        <div className="space-y-3">
+          {isLoading && (
+            <Card className="border-border shadow-card">
+              <CardContent className="p-5 text-sm text-muted-foreground">
+                Loading blog posts...
+              </CardContent>
+            </Card>
+          )}
+          {!isLoading && posts.length === 0 && (
+            <EmptyState message="No blog posts yet. Create the first patient article from the form." />
+          )}
+          {posts.map((post) => (
+            <Card key={post.id} className="border-border shadow-card">
+              <CardContent className="grid gap-4 p-4 md:grid-cols-[9rem_1fr]">
+                {post.imageUrl ? (
+                  <img
+                    src={post.imageUrl}
+                    alt=""
+                    className="aspect-[16/10] w-full rounded-md object-cover"
+                    loading="lazy"
+                  />
+                ) : (
+                  <div className="aspect-[16/10] rounded-md bg-primary-gradient" />
+                )}
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <StatusBadge
+                      label={post.isPublished ? "Published" : "Draft"}
+                      tone={post.isPublished ? "teal" : "slate"}
+                    />
+                    <span className="text-xs uppercase tracking-[0.14em] text-muted-foreground">
+                      {post.category}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      {formatBlogDate(post.publishedAt)}
+                    </span>
+                  </div>
+                  <h3 className="mt-2 truncate text-lg font-semibold">{post.title}</h3>
+                  <p className="mt-1 line-clamp-2 text-sm leading-6 text-muted-foreground">
+                    {post.excerpt}
+                  </p>
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <Button size="sm" variant="outline" onClick={() => editPost(post)}>
+                      <Pencil /> Edit
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => deletePost(post)}>
+                      <Trash2 /> Delete
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ClinicGalleryAdminPage() {
+  const queryClient = useQueryClient();
+  const [title, setTitle] = useState("");
+  const [altText, setAltText] = useState("");
+  const [imageUrl, setImageUrl] = useState("");
+  const [sortOrder, setSortOrder] = useState("0");
+  const [isPublished, setIsPublished] = useState(true);
+  const [file, setFile] = useState<File | null>(null);
+  const [saving, setSaving] = useState(false);
+  const { data: images = [], isLoading } = useQuery({
+    queryKey: ["admin-clinic-gallery-images"],
+    queryFn: fetchAdminClinicGallery,
+    staleTime: 1000 * 60 * 2,
+  });
+
+  async function getAdminUser() {
+    const { data: userData } = await supabase.auth.getUser();
+    if (!userData.user) {
+      throw new Error(
+        hasTemporaryAdminSession()
+          ? "Temporary admin access can view this page. Confirm the admin email before uploading images."
+          : "Please sign in as an admin before uploading gallery images.",
+      );
+    }
+
+    const { data: roles, error } = await supabase
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", userData.user.id);
+    if (error) throw error;
+    if (!canManageClinic(userData.user.email, roles)) {
+      throw new Error("Only the doctor/admin account can manage clinic gallery images.");
+    }
+
+    return userData.user;
+  }
+
+  async function saveImage(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSaving(true);
+    try {
+      const user = await getAdminUser();
+      let uploadedUrl = imageUrl.trim();
+      let storagePath: string | null = null;
+
+      if (file) {
+        storagePath = galleryStoragePath(user.id, file);
+        const { error: uploadError } = await supabase.storage
+          .from(CLINIC_GALLERY_BUCKET)
+          .upload(storagePath, file, {
+            cacheControl: "31536000",
+            upsert: false,
+          });
+        if (uploadError) throw uploadError;
+
+        const { data } = supabase.storage.from(CLINIC_GALLERY_BUCKET).getPublicUrl(storagePath);
+        uploadedUrl = data.publicUrl;
+      }
+
+      if (!uploadedUrl) {
+        toast.error("Choose an image file or paste an image URL.");
+        return;
+      }
+
+      const { error } = await supabase.from("clinic_gallery_images").insert({
+        uploaded_by: user.id,
+        title: title.trim() || "Clinic photo",
+        alt_text: altText.trim() || title.trim() || "HealthyGrinz clinic photo",
+        image_url: uploadedUrl,
+        storage_path: storagePath,
+        sort_order: Number(sortOrder) || 0,
+        is_published: isPublished,
+      });
+      if (error) throw error;
+
+      toast.success(isPublished ? "Clinic image published" : "Clinic image saved as draft");
+      setTitle("");
+      setAltText("");
+      setImageUrl("");
+      setSortOrder("0");
+      setIsPublished(true);
+      setFile(null);
+      await queryClient.invalidateQueries({ queryKey: ["admin-clinic-gallery-images"] });
+      await queryClient.invalidateQueries({ queryKey: ["clinic-gallery-images"] });
+    } catch (error) {
+      toast.error(getErrorMessage(error, "Could not upload clinic image"));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function togglePublished(image: ClinicGalleryImage) {
+    try {
+      await getAdminUser();
+      const { error } = await supabase
+        .from("clinic_gallery_images")
+        .update({ is_published: !image.isPublished })
+        .eq("id", image.id);
+      if (error) throw error;
+      toast.success(image.isPublished ? "Image hidden from website" : "Image published");
+      await queryClient.invalidateQueries({ queryKey: ["admin-clinic-gallery-images"] });
+      await queryClient.invalidateQueries({ queryKey: ["clinic-gallery-images"] });
+    } catch (error) {
+      toast.error(getErrorMessage(error, "Could not update gallery image"));
+    }
+  }
+
+  async function deleteImage(image: ClinicGalleryImage) {
+    if (!window.confirm(`Delete "${image.title}" from the clinic gallery?`)) return;
+    try {
+      await getAdminUser();
+      const { error } = await supabase.from("clinic_gallery_images").delete().eq("id", image.id);
+      if (error) throw error;
+
+      if (image.storagePath) {
+        await supabase.storage.from(CLINIC_GALLERY_BUCKET).remove([image.storagePath]);
+      }
+
+      toast.success("Clinic image deleted");
+      await queryClient.invalidateQueries({ queryKey: ["admin-clinic-gallery-images"] });
+      await queryClient.invalidateQueries({ queryKey: ["clinic-gallery-images"] });
+    } catch (error) {
+      toast.error(getErrorMessage(error, "Could not delete clinic image"));
+    }
+  }
+
+  return (
+    <div className="grid gap-5 xl:grid-cols-[0.85fr_1.25fr]">
+      <div className="space-y-5">
+        <PageHeader
+          eyebrow="Clinic media"
+          title="Upload clinic gallery photos"
+          description="Add photos of the reception, treatment rooms, equipment, team, and patient-friendly clinic spaces."
+        />
+        <Card className="border-border shadow-card">
+          <CardHeader>
+            <CardTitle className="text-base">New gallery image</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={saveImage} className="space-y-4">
+              <Field label="Image file">
+                <Input
+                  type="file"
+                  accept="image/*"
+                  onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+                />
+              </Field>
+              <Field label="Or image URL">
+                <Input
+                  value={imageUrl}
+                  onChange={(event) => setImageUrl(event.target.value)}
+                  placeholder="https://..."
+                />
+              </Field>
+              <Field label="Title">
+                <Input
+                  value={title}
+                  onChange={(event) => setTitle(event.target.value)}
+                  placeholder="Reception area"
+                />
+              </Field>
+              <Field label="Alt text">
+                <Input
+                  value={altText}
+                  onChange={(event) => setAltText(event.target.value)}
+                  placeholder="HealthyGrinz reception area"
+                />
+              </Field>
+              <div className="grid gap-4 md:grid-cols-2">
+                <Field label="Sort order">
+                  <Input
+                    type="number"
+                    value={sortOrder}
+                    onChange={(event) => setSortOrder(event.target.value)}
+                  />
+                </Field>
+                <div className="flex items-end">
+                  <Button
+                    type="button"
+                    variant={isPublished ? "default" : "outline"}
+                    onClick={() => setIsPublished((value) => !value)}
+                    className="w-full"
+                  >
+                    {isPublished ? "Published" : "Draft"}
+                  </Button>
+                </div>
+              </div>
+              <Button disabled={saving} type="submit">
+                <Upload /> {saving ? "Uploading..." : "Upload image"}
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="space-y-5">
+        <PageHeader
+          eyebrow="Website gallery"
+          title="Manage clinic gallery"
+          description="Published images appear in the Clinic Gallery section on the About page."
+          action={
+            <Button variant="outline" asChild>
+              <a href="/about#clinic-gallery">
+                <Eye /> View gallery
+              </a>
+            </Button>
+          }
+        />
+        {isLoading && (
+          <Card className="border-border shadow-card">
+            <CardContent className="p-5 text-sm text-muted-foreground">
+              Loading gallery images...
+            </CardContent>
+          </Card>
+        )}
+        {!isLoading && images.length === 0 && (
+          <EmptyState message="No clinic gallery images yet. Upload the first clinic photo from the form." />
+        )}
+        <div className="grid gap-4 md:grid-cols-2">
+          {images.map((image) => (
+            <Card key={image.id} className="overflow-hidden border-border shadow-card">
+              <img
+                src={image.imageUrl}
+                alt={image.altText}
+                className="aspect-[16/10] w-full object-cover"
+                loading="lazy"
+              />
+              <CardContent className="p-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  <StatusBadge
+                    label={image.isPublished ? "Published" : "Draft"}
+                    tone={image.isPublished ? "teal" : "slate"}
+                  />
+                  <span className="text-xs text-muted-foreground">Order {image.sortOrder}</span>
+                </div>
+                <h3 className="mt-2 truncate font-semibold">{image.title}</h3>
+                <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{image.altText}</p>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <Button size="sm" variant="outline" onClick={() => togglePublished(image)}>
+                    {image.isPublished ? "Hide" : "Publish"}
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => deleteImage(image)}>
+                    <Trash2 /> Delete
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { ArrowLeft } from "lucide-react";
@@ -6,6 +6,12 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { lovable } from "@/integrations/lovable";
 import { BrandLogo } from "@/components/site/BrandLogo";
+import {
+  CLINIC_ADMIN_EMAIL,
+  isDoctorAdminEmail,
+  isTemporaryAdminCredentials,
+  setTemporaryAdminSession,
+} from "@/lib/admin-access";
 
 export const Route = createFileRoute("/auth")({ component: AuthPage });
 
@@ -15,35 +21,69 @@ function AuthPage() {
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [loading, setLoading] = useState(false);
-  const navigate = useNavigate();
+  const params = new URLSearchParams(typeof window === "undefined" ? "" : window.location.search);
+  const redirectTo = safeRedirect(params.get("redirect"));
+  const isAdminRedirect = redirectTo === "/admin";
 
   useEffect(() => {
+    if (params.get("mode") === "signup") setMode("signup");
+    if (isAdminRedirect) setEmail(CLINIC_ADMIN_EMAIL);
+
     supabase.auth.getUser().then(({ data }) => {
-      if (data.user) navigate({ to: "/dashboard" });
+      if (data.user) window.location.href = redirectTo;
     });
-  }, [navigate]);
+  }, [isAdminRedirect, redirectTo]);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
     try {
+      if (mode === "signin" && isTemporaryAdminCredentials(email, password)) {
+        setTemporaryAdminSession(email);
+        toast.success("Temporary admin access enabled.");
+        window.location.href = "/admin";
+        return;
+      }
+
       if (mode === "signup") {
-        const { error } = await supabase.auth.signUp({
+        const { data, error } = await supabase.auth.signUp({
           email,
           password,
-          options: { emailRedirectTo: window.location.origin, data: { full_name: name } },
+          options: {
+            emailRedirectTo: `${window.location.origin}${redirectTo}`,
+            data: { full_name: name },
+          },
         });
         if (error) throw error;
-        toast.success("Welcome to HealthyGrinz! Check your email if confirmation is required.");
-        navigate({ to: "/dashboard" });
+
+        if (!data.session) {
+          toast.success("Account created. Check your email to confirm, then sign in.");
+          setMode("signin");
+          return;
+        }
+
+        toast.success(isDoctorAdminEmail(email) ? "Doctor account created." : "Welcome to HealthyGrinz!");
+        window.location.href = redirectTo;
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
         toast.success("Welcome back!");
-        navigate({ to: "/dashboard" });
+        window.location.href = redirectTo;
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Auth failed");
+      const message = err instanceof Error ? err.message : "Auth failed";
+      if (mode === "signin" && isDoctorAdminEmail(email) && message.includes("Email not confirmed")) {
+        setTemporaryAdminSession(email);
+        toast.success("Email is not confirmed yet. Temporary admin access enabled.");
+        window.location.href = "/admin";
+        return;
+      }
+      if (mode === "signin" && message.includes("Invalid login")) {
+        setMode("signup");
+        toast.error("No account found for this email or the password is wrong. Create the account first if this is your first login.");
+        return;
+      }
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -57,7 +97,7 @@ function AuthPage() {
       toast.error("Google sign-in failed");
       return;
     }
-    if (!res.redirected) navigate({ to: "/dashboard" });
+    if (!res.redirected) window.location.href = redirectTo;
   }
 
   return (
@@ -75,12 +115,20 @@ function AuthPage() {
           <BrandLogo />
         </div>
         <h1 className="text-3xl font-normal tracking-tight">
-          {mode === "signin" ? "Welcome back" : "Create your account"}
+          {mode === "signin"
+            ? isAdminRedirect
+              ? "Doctor sign in"
+              : "Welcome back"
+            : isAdminRedirect
+              ? "Create doctor account"
+              : "Create your account"}
         </h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          {mode === "signin"
-            ? "Access your dashboard & appointments."
-            : "Book, track, and get AI-powered guidance."}
+          {isAdminRedirect
+            ? "Use the clinic doctor email and password to access admin."
+            : mode === "signin"
+              ? "Access your dashboard & appointments."
+              : "Book, track, and get AI-powered guidance."}
         </p>
 
         <button
@@ -139,4 +187,10 @@ function AuthPage() {
       </div>
     </div>
   );
+}
+
+function safeRedirect(value: string | null) {
+  if (!value) return "/dashboard";
+  if (!value.startsWith("/") || value.startsWith("//")) return "/dashboard";
+  return value;
 }

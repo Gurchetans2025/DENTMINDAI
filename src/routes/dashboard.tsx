@@ -4,6 +4,7 @@ import { Calendar, HeartPulse, FileText, DollarSign, Brain, LogOut, ArrowLeft } 
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { BrandLogo } from "@/components/site/BrandLogo";
+import { canManageClinic } from "@/lib/admin-access";
 
 export const Route = createFileRoute("/dashboard")({ component: Dashboard });
 
@@ -35,7 +36,7 @@ function Dashboard() {
         .from("user_roles")
         .select("role")
         .eq("user_id", data.user.id);
-      setIsAdmin(!!role?.some((r) => r.role === "admin"));
+      setIsAdmin(canManageClinic(data.user.email, role));
       const { data: rows } = await supabase
         .from("appointments")
         .select("*")

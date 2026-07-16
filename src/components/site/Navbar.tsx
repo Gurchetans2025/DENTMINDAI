@@ -66,7 +66,7 @@ export function Nav() {
               </Link>
             )}
             <a
-              href="#booking"
+              href="/#booking"
               className="text-sm px-5 py-2.5 rounded-full bg-primary-gradient text-primary-foreground shadow-soft hover:shadow-elegant transition-all"
             >
               Book Appointment
@@ -113,7 +113,7 @@ export function Nav() {
                 </button>
               )}
               <a
-                href="#booking"
+                href="/#booking"
                 onClick={() => setOpen(false)}
                 className="text-center py-3 rounded-full bg-primary-gradient text-primary-foreground"
               >

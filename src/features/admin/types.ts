@@ -8,6 +8,8 @@ export type AdminView =
   | "treatments"
   | "billing"
   | "inventory"
+  | "blog"
+  | "clinic-gallery"
   | "ai-center"
   | "ai-assistant"
   | "ai-symptom-checker"
